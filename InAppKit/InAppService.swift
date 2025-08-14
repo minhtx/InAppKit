@@ -1,5 +1,5 @@
 //
-//  InAppKit.swift
+//  InAppService.swift
 //  InAppKit
 //
 //  Created by Trinh Xuan Minh on 12/8/25.
@@ -10,7 +10,7 @@ import StoreKit
 import Combine
 
 @available(iOS 15, *)
-public protocol InAppProtocol: AnyObject {
+public protocol InAppServiceType: AnyObject {
     var permissionsSubject: CurrentValueSubject<[PermissionInfo], Never> { get }
     var isPurchasingSubject: CurrentValueSubject<Bool, Never> { get }
     
@@ -23,7 +23,7 @@ public protocol InAppProtocol: AnyObject {
 }
 
 @available(iOS 15, *)
-public final class InAppKit: InAppProtocol {
+public final class InAppService: InAppServiceType {
     public var permissionsSubject = CurrentValueSubject<[PermissionInfo], Never>([])
     public var isPurchasingSubject = CurrentValueSubject<Bool, Never>(false)
     
@@ -36,7 +36,7 @@ public final class InAppKit: InAppProtocol {
     }
 }
 
-extension InAppKit {
+extension InAppService {
     public func retrieveInfo(_ product: BaseProduct) async throws -> ProductInfo {
         print("[InAppKit] Start getting product information! - \(product)")
         let productIDs = [product.id]
@@ -155,7 +155,7 @@ extension InAppKit {
     }
 }
 
-extension InAppKit {
+extension InAppService {
     private func getVerifiedTransaction() async -> [Transaction] {
         var transactions: [Transaction] = []
         
