@@ -158,7 +158,25 @@ extension InAppService {
     }
     
     public func restore() async {
-        await updatePermissions()
+        print("[InAppKit] Restoring!")
+        var transactionPermissions = [PermissionInfo]()
+        
+        for await verification in Transaction.all {
+            guard case .verified(let transaction) = verification else {
+                continue
+            }
+            let permissions = getPermissions(transaction)
+            transactionPermissions += permissions
+        }
+        let mergePermissions = mergePermissions(transactionPermissions)
+        
+        await MainActor.run { [weak self] in
+            guard let self else {
+                return
+            }
+            self.permissionsSubject.send(mergePermissions)
+            print("[InAppKit] Restored!")
+        }
     }
     
     @MainActor
@@ -257,7 +275,6 @@ extension InAppService {
             guard case .verified(let transaction) = verification else {
                 continue
             }
-            print("[InAppKit] 🔄 Current transactions:", transaction)
             let permissions = getPermissions(transaction)
             transactionPermissions += permissions
         }
