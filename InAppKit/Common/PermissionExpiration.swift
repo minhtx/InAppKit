@@ -9,7 +9,7 @@ import Foundation
 
 public enum PermissionExpiration {
     case lifetime
-    case renewable(date: Date)
+    case expires(on: Date)
 }
 
 extension PermissionExpiration {
@@ -19,7 +19,7 @@ extension PermissionExpiration {
             return .lifetime
         case (_, .lifetime):
             return .lifetime
-        case let (.renewable(dateA), .renewable(dateB)):
+        case let (.expires(dateA), .expires(dateB)):
             return dateA > dateB ? a : b
         }
     }

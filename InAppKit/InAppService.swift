@@ -27,12 +27,24 @@ public final class InAppService: InAppServiceType {
     public var permissionsSubject = CurrentValueSubject<[PermissionInfo], Never>([])
     public var isPurchasingSubject = CurrentValueSubject<Bool, Never>(false)
     
-    private var permissions = [BasePermission]()
+    private let products: [BaseProduct]
+    private let permissions: [BasePermission]
+    private var expiryCheckTask: Task<Void, Never>?
     
-    public init(permissions: [BasePermission]) {
+    public init(products: [BaseProduct], permissions: [BasePermission]) {
+        self.products = products
         self.permissions = permissions
+        
         requestPermissions()
         observeTransactions()
+        startExpiryCheckLoop()
+        addObserver()
+    }
+    
+    deinit {
+        stopExpiryCheckLoop()
+        NotificationCenter.default.removeObserver(self)
+        print("[InAppKit] Deinit!")
     }
 }
 
@@ -46,8 +58,8 @@ extension InAppService {
         return instance
     }
     
-    public static func configureShared(with permissions: [BasePermission]) {
-        _sharedInstance = InAppService(permissions: permissions)
+    public static func configureShared(with products: [BaseProduct], permissions: [BasePermission]) {
+        _sharedInstance = InAppService(products: products, permissions: permissions)
     }
 }
 
@@ -177,6 +189,30 @@ extension InAppService {
 }
 
 extension InAppService {
+    private func addObserver() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil)
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appWillResignActive),
+            name: UIApplication.willResignActiveNotification,
+            object: nil)
+    }
+    
+    @objc private func appDidBecomeActive() {
+        startExpiryCheckLoop()
+    }
+    
+    @objc private func appWillResignActive() {
+        stopExpiryCheckLoop()
+    }
+}
+
+extension InAppService {
     private func getVerifiedTransaction() async -> [Transaction] {
         var transactions: [Transaction] = []
         
@@ -190,14 +226,20 @@ extension InAppService {
     }
     
     private func requestPermissions() {
-        Task.detached(priority: .background) {
+        Task.detached(priority: .background) { [weak self] in
+            guard let self else {
+                return
+            }
             await self.updatePermissions()
         }
     }
     
     private func observeTransactions() {
-        Task.detached(priority: .background) {
+        Task.detached(priority: .background) { [weak self] in
             for await verification in Transaction.updates {
+                guard let self else {
+                    return
+                }
                 guard case .verified(let transaction) = verification else {
                     continue
                 }
@@ -215,12 +257,16 @@ extension InAppService {
             guard case .verified(let transaction) = verification else {
                 continue
             }
+            print("[InAppKit] 🔄 Current transactions:", transaction)
             let permissions = getPermissions(transaction)
             transactionPermissions += permissions
         }
         let mergePermissions = mergePermissions(transactionPermissions)
         
-        await MainActor.run {
+        await MainActor.run { [weak self] in
+            guard let self else {
+                return
+            }
             self.permissionsSubject.send(mergePermissions)
             print("[InAppKit] Finished permissions update!")
         }
@@ -237,15 +283,38 @@ extension InAppService {
             assertionFailure("[InAppKit] Empty permissions!")
             return []
         }
+        guard !products.isEmpty else {
+            assertionFailure("[InAppKit] Empty products!")
+            return []
+        }
+        guard let product = products.first(where: { $0.id == transaction.productID }) else {
+            assertionFailure("[InAppKit] Product not exist!")
+            return []
+        }
+        
         let expiration: PermissionExpiration
         switch transaction.productType {
-        case .autoRenewable, .nonRenewable:
+        case .autoRenewable:
             guard let expirationDate = transaction.expirationDate, expirationDate >= Date() else {
                 return []
             }
-            expiration = .renewable(date: expirationDate)
-        default:
+            expiration = .expires(on: expirationDate)
+        case .nonConsumable:
             expiration = .lifetime
+        case .nonRenewable:
+            guard let duration = product.duration else {
+                assertionFailure("[InAppKit] Duration not declared!")
+                return []
+            }
+            let purchaseDate = transaction.purchaseDate
+            let expirationDate = purchaseDate.addingTimeInterval(duration)
+            
+            guard expirationDate >= Date() else {
+                return []
+            }
+            expiration = .expires(on: expirationDate)
+        default:
+            return []
         }
         
         return permissions.filter { permission in
@@ -275,5 +344,42 @@ extension InAppService {
         }
         
         return dict.map { $0.value }
+    }
+    
+    private func startExpiryCheckLoop() {
+        print("[InAppKit] Start expiry check loop!")
+        self.expiryCheckTask?.cancel()
+        self.expiryCheckTask = Task.detached(priority: .background) { [weak self] in
+            let expiryCheckInterval: TimeInterval = 30
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(expiryCheckInterval * 1_000_000_000))
+                
+                guard let self = self else {
+                    return
+                }
+                print("[InAppKit] Expiry check!")
+                
+                var shouldUpdate = false
+                let permissions = self.permissionsSubject.value
+                
+                for permission in permissions {
+                    if case .expires(let date) = permission.expiration, date < Date() {
+                        shouldUpdate = true
+                        break
+                    }
+                }
+                
+                if shouldUpdate {
+                    print("[InAppKit] Permission expired!")
+                    await self.updatePermissions()
+                }
+            }
+        }
+    }
+    
+    private func stopExpiryCheckLoop() {
+        print("[InAppKit] Stop expiry check loop!")
+        expiryCheckTask?.cancel()
+        self.expiryCheckTask = nil
     }
 }

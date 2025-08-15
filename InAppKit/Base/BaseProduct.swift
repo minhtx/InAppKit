@@ -9,5 +9,6 @@ import Foundation
 
 public protocol BaseProduct {
     var id: String { get }
+    var duration: TimeInterval? { get }
     var value: [String: Any]? { get }
 }
