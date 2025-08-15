@@ -27,12 +27,27 @@ public final class InAppService: InAppServiceType {
     public var permissionsSubject = CurrentValueSubject<[PermissionInfo], Never>([])
     public var isPurchasingSubject = CurrentValueSubject<Bool, Never>(false)
     
-    private var permissions: [BasePermission]
+    private var permissions = [BasePermission]()
     
     public init(permissions: [BasePermission]) {
         self.permissions = permissions
         requestPermissions()
         observeTransactions()
+    }
+}
+
+extension InAppService {
+    private static var _sharedInstance: InAppService?
+    
+    public static var sharedInstance: InAppService {
+        guard let instance = _sharedInstance else {
+            fatalError("InAppService is not configured yet. Call configure configureShared() first.")
+        }
+        return instance
+    }
+    
+    public static func configureShared(with permissions: [BasePermission]) {
+        _sharedInstance = InAppService(permissions: permissions)
     }
 }
 
@@ -238,7 +253,7 @@ extension InAppService {
                 return product.id == transaction.productID
             }
         }.map { permission in
-            return PermissionInfo(permission: permission,
+            return PermissionInfo(originalPermission: permission,
                                   expiration: expiration)
         }
     }
@@ -247,14 +262,14 @@ extension InAppService {
         var dict: [String: PermissionInfo] = [:]
         
         for permissionInfo in permissions {
-            let id = permissionInfo.permission.id
+            let id = permissionInfo.originalPermission.id
             let expiration = permissionInfo.expiration
             
             if let existing = dict[id] {
-                dict[id] = PermissionInfo(permission: existing.permission,
+                dict[id] = PermissionInfo(originalPermission: existing.originalPermission,
                                           expiration: PermissionExpiration.max(existing.expiration, expiration))
             } else {
-                dict[id] = PermissionInfo(permission: permissionInfo.permission,
+                dict[id] = PermissionInfo(originalPermission: permissionInfo.originalPermission,
                                           expiration: expiration)
             }
         }
