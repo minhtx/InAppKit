@@ -48,7 +48,7 @@ extension InAppService {
         
         let verifiedTransaction = await getVerifiedTransaction()
         
-        let productInfo = originalProduct.toProductInfo(transactions: verifiedTransaction)
+        let productInfo = originalProduct.toProductInfo(product: product, transactions: verifiedTransaction)
         print("[InAppKit] Product information retrieved! - \(product)")
         return productInfo
     }
@@ -60,7 +60,13 @@ extension InAppService {
         
         let verifiedTransaction = await getVerifiedTransaction()
         
-        let productInfos = originalProducts.map { $0.toProductInfo(transactions: verifiedTransaction) }
+        let productDictionary = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
+        let productInfos: [ProductInfo] = originalProducts.compactMap { originalProduct in
+            guard let baseProduct = productDictionary[originalProduct.id] else {
+                return nil
+            }
+            return originalProduct.toProductInfo(product: baseProduct, transactions: verifiedTransaction)
+        }
         print("[InAppKit] Products information retrieved! - \(products)")
         return productInfos
     }
@@ -100,7 +106,7 @@ extension InAppService {
                 await updatePermissions()
                 
                 let verifiedTransaction = await getVerifiedTransaction()
-                let productInfo = originalProduct.toProductInfo(transactions: verifiedTransaction)
+                let productInfo = originalProduct.toProductInfo(product: product, transactions: verifiedTransaction)
                 print("[InAppKit] Purchased! - \(product)")
                 self.isPurchasingSubject.send(false)
                 return productInfo
