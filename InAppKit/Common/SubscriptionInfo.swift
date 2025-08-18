@@ -9,18 +9,20 @@ import Foundation
 import StoreKit
 
 public struct SubscriptionInfo {
-    public let groupID: String
+    public let originalSubscriptionInfo: Product.SubscriptionInfo
+    public let subscriptionGroupID: String
     public let period: Product.SubscriptionPeriod
-    public let offers: [Offer]
+    public let offerInfos: [OfferInfo]
     public let groupDisplayName: String?
     
-    init(_ subscription: Product.SubscriptionInfo, offers: [Offer]) {
-        self.groupID = subscription.subscriptionGroupID
-        self.period = subscription.subscriptionPeriod
-        self.offers = offers
+    init(_ originalSubscriptionInfo: Product.SubscriptionInfo) {
+        self.originalSubscriptionInfo = originalSubscriptionInfo
+        self.subscriptionGroupID = originalSubscriptionInfo.subscriptionGroupID
+        self.period = originalSubscriptionInfo.subscriptionPeriod
+        self.offerInfos = originalSubscriptionInfo.offerInfos()
         
         if #available(iOS 16.4, *) {
-            self.groupDisplayName = subscription.groupDisplayName
+            self.groupDisplayName = originalSubscriptionInfo.groupDisplayName
         } else {
             self.groupDisplayName = nil
         }
@@ -28,12 +30,11 @@ public struct SubscriptionInfo {
 }
 
 extension Product.SubscriptionInfo {
-    func toSubscriptionInfo(transactions: [Transaction]) -> SubscriptionInfo {
-        let offers = offers(transactions: transactions)
-        return SubscriptionInfo(self, offers: offers)
+    func toSubscriptionInfo() -> SubscriptionInfo {
+        return SubscriptionInfo(self)
     }
     
-    func offers(transactions: [Transaction]) -> [Offer] {
+    func offerInfos() -> [OfferInfo] {
         var subscriptionOffers: [Product.SubscriptionOffer] = []
         
         if let introductoryOffer = self.introductoryOffer {
@@ -46,11 +47,6 @@ extension Product.SubscriptionInfo {
             subscriptionOffers += self.winBackOffers
         }
         
-        let groupTransactions = transactions.filter { $0.subscriptionGroupID == self.subscriptionGroupID }
-        
-        return subscriptionOffers.compactMap { subscriptionOffer in
-            let eligibility = subscriptionOffer.eligibility(groupTransactions: groupTransactions)
-            return subscriptionOffer.toOffer(eligibility: eligibility)
-        }
+        return subscriptionOffers.compactMap { $0.toOfferInfo(subscriptionGroupID: self.subscriptionGroupID) }
     }
 }

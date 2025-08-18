@@ -9,8 +9,8 @@ import Foundation
 import StoreKit
 
 public struct ProductInfo {
-    public let id: String
     public let originalProduct: Product
+    public let product: BaseProduct
     public let type: Product.ProductType
     public let displayName: String
     public let description: String
@@ -18,21 +18,21 @@ public struct ProductInfo {
     public let displayPrice: String
     public let subscriptionInfo: SubscriptionInfo?
     
-    init(_ product: Product, subscriptionInfo: SubscriptionInfo?) {
-        self.id = product.id
-        self.originalProduct = product
-        self.type = product.type
-        self.displayName = product.displayName
-        self.description = product.description
-        self.price = product.price
-        self.displayPrice = product.displayPrice
+    init(_ originalProduct: Product, product: BaseProduct, subscriptionInfo: SubscriptionInfo?) {
+        self.originalProduct = originalProduct
+        self.product = product
+        self.type = originalProduct.type
+        self.displayName = originalProduct.displayName
+        self.description = originalProduct.description
+        self.price = originalProduct.price
+        self.displayPrice = originalProduct.displayPrice
         self.subscriptionInfo = subscriptionInfo
     }
 }
 
 extension Product {
-    func toProductInfo(transactions: [Transaction]) -> ProductInfo {
-        let subscriptionInfo = self.subscription?.toSubscriptionInfo(transactions: transactions)
-        return ProductInfo(self, subscriptionInfo: subscriptionInfo)
+    func toProductInfo(product: BaseProduct) -> ProductInfo {
+        let subscriptionInfo = self.subscription?.toSubscriptionInfo()
+        return ProductInfo(self, product: product, subscriptionInfo: subscriptionInfo)
     }
 }
