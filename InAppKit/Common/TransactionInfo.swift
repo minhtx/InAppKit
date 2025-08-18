@@ -17,7 +17,7 @@ public struct TransactionInfo {
     public let expirationDate: Date?
     public let refundedDate: Date?
     
-    public var expiration: Expiration? {
+    public var expiration: Expiration {
         return getExpiration()
     }
     
@@ -35,11 +35,11 @@ public struct TransactionInfo {
         self.refundedDate = originalTransaction.revocationDate
     }
     
-    private func getExpiration() -> Expiration? {
+    private func getExpiration() -> Expiration {
         switch originalTransaction.productType {
         case .autoRenewable:
             guard let expirationDate = originalTransaction.expirationDate, expirationDate >= Date() else {
-                return nil
+                return .unknown
             }
             return .expires(on: expirationDate)
         case .nonConsumable:
@@ -47,17 +47,17 @@ public struct TransactionInfo {
         case .nonRenewable:
             guard let duration = product.duration else {
                 assertionFailure("[InAppKit] Duration not declared!")
-                return nil
+                return .unknown
             }
             let purchaseDate = originalTransaction.purchaseDate
             let expirationDate = purchaseDate.addingTimeInterval(duration)
             
             guard expirationDate >= Date() else {
-                return nil
+                return .unknown
             }
             return .expires(on: expirationDate)
         default:
-            return nil
+            return .unknown
         }
     }
 }

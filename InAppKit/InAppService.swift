@@ -390,10 +390,9 @@ extension InAppService {
         print("[InAppKit] Start expiry check loop!")
         self.expiryCheckTask?.cancel()
         self.expiryCheckTask = Task.detached(priority: .background) { [weak self] in
-            let expiryCheckInterval: TimeInterval = 30
+            let expiryCheckInterval = 30
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(expiryCheckInterval * 1_000_000_000))
-                
                 guard let self = self else {
                     return
                 }
