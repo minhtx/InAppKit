@@ -16,10 +16,11 @@ public protocol InAppServiceType: AnyObject {
     
     func retrieveInfo(_ product: BaseProduct) async throws -> ProductInfo
     func retrieveInfo(_ products: [BaseProduct]) async throws -> [ProductInfo]
-    func history() async -> [Transaction]
+    func eligibilityOffer(_ offerInfo: OfferInfo) async -> OfferEligibility
+    func history() async -> [TransactionInfo]
     func purchase(_ product: BaseProduct) async throws -> ProductInfo
     func restore() async
-    @MainActor func requestRefund(for transaction: Transaction, in scene: UIWindowScene) async throws -> Transaction
+    @MainActor func requestRefund(for transactionInfo: TransactionInfo, in scene: UIWindowScene) async throws -> TransactionInfo
 }
 
 @available(iOS 15, *)
@@ -73,9 +74,7 @@ extension InAppService {
             throw InAppError.productNotExist
         }
         
-        let verifiedTransaction = await getVerifiedTransaction()
-        
-        let productInfo = originalProduct.toProductInfo(product: product, transactions: verifiedTransaction)
+        let productInfo = originalProduct.toProductInfo(product: product)
         print("[InAppKit] Product information retrieved! - \(product)")
         return productInfo
     }
@@ -85,20 +84,45 @@ extension InAppService {
         let productIDs = products.map((\.id))
         let originalProducts = try await Product.products(for: productIDs)
         
-        let verifiedTransaction = await getVerifiedTransaction()
-        
         let productDictionary = Dictionary(uniqueKeysWithValues: products.map { ($0.id, $0) })
         let productInfos: [ProductInfo] = originalProducts.compactMap { originalProduct in
             guard let baseProduct = productDictionary[originalProduct.id] else {
                 return nil
             }
-            return originalProduct.toProductInfo(product: baseProduct, transactions: verifiedTransaction)
+            return originalProduct.toProductInfo(product: baseProduct)
         }
         print("[InAppKit] Products information retrieved! - \(products)")
         return productInfos
     }
     
-    public func history() async -> [Transaction] {
+    public func eligibilityOffer(_ offerInfo: OfferInfo) async -> OfferEligibility {
+        let verifiedTransaction = await getVerifiedTransaction()
+        let groupTransactions = verifiedTransaction.filter { $0.subscriptionGroupID == offerInfo.subscriptionGroupID }
+        
+        for transaction in groupTransactions {
+            switch offerInfo.type {
+            case .introductory:
+                if transaction.offerType == .introductory {
+                    return .ineligible
+                }
+            default:
+                guard #available(iOS 17.2, *) else {
+                    return .unknown
+                }
+                if let transactionOffer = transaction.offer,
+                   let mappedType = Product.SubscriptionOffer.OfferType(transactionOfferType: transactionOffer.type),
+                   mappedType == offerInfo.type,
+                   let offerID = offerInfo.id,
+                   offerID == transactionOffer.id
+                {
+                    return .ineligible
+                }
+            }
+        }
+        return .eligible
+    }
+    
+    public func history() async -> [TransactionInfo] {
         print("[InAppKit] Retrieving history!")
         let verifiedTransaction = await getVerifiedTransaction()
         
@@ -107,7 +131,7 @@ extension InAppService {
         } else {
             print("[InAppKit] History returned!")
         }
-        return verifiedTransaction
+        return verifiedTransaction.compactMap { $0.toTransactionInfo(products: products) }
     }
     
     public func purchase(_ product: BaseProduct) async throws -> ProductInfo {
@@ -132,8 +156,7 @@ extension InAppService {
                 
                 await updatePermissions()
                 
-                let verifiedTransaction = await getVerifiedTransaction()
-                let productInfo = originalProduct.toProductInfo(product: product, transactions: verifiedTransaction)
+                let productInfo = originalProduct.toProductInfo(product: product)
                 print("[InAppKit] Purchased! - \(product)")
                 self.isPurchasingSubject.send(false)
                 return productInfo
@@ -180,14 +203,14 @@ extension InAppService {
     }
     
     @MainActor
-    public func requestRefund(for transaction: Transaction, in scene: UIWindowScene) async throws -> Transaction {
+    public func requestRefund(for transactionInfo: TransactionInfo, in scene: UIWindowScene) async throws -> TransactionInfo {
         do {
-            let status = try await transaction.beginRefundRequest(in: scene)
+            let status = try await transactionInfo.originalTransaction.beginRefundRequest(in: scene)
             
             switch status {
             case .success:
                 print("[InAppKit] Refund request sheet presented!")
-                return transaction
+                return transactionInfo
             case .userCancelled:
                 print("[InAppKit] User cancelled refund request!")
                 throw InAppError.userCancelled
@@ -309,7 +332,7 @@ extension InAppService {
             return []
         }
         
-        let expiration: PermissionExpiration
+        let expiration: Expiration
         switch transaction.productType {
         case .autoRenewable:
             guard let expirationDate = transaction.expirationDate, expirationDate >= Date() else {
@@ -353,7 +376,7 @@ extension InAppService {
             
             if let existing = dict[id] {
                 dict[id] = PermissionInfo(originalPermission: existing.originalPermission,
-                                          expiration: PermissionExpiration.max(existing.expiration, expiration))
+                                          expiration: Expiration.max(existing.expiration, expiration))
             } else {
                 dict[id] = PermissionInfo(originalPermission: permissionInfo.originalPermission,
                                           expiration: expiration)

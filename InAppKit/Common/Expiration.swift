@@ -1,5 +1,5 @@
 //
-//  PermissionExpiration.swift
+//  Expiration.swift
 //  InAppKit
 //
 //  Created by Trinh Xuan Minh on 13/8/25.
@@ -7,12 +7,12 @@
 
 import Foundation
 
-public enum PermissionExpiration {
+public enum Expiration: Equatable {
     case lifetime
     case expires(on: Date)
 }
 
-extension PermissionExpiration {
+extension Expiration {
     static func max(_ a: Self, _ b: Self) -> Self {
         switch (a, b) {
         case (.lifetime, _):

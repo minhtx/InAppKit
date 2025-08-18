@@ -9,9 +9,9 @@ import Foundation
 
 public struct PermissionInfo {
     public let originalPermission: BasePermission
-    public let expiration: PermissionExpiration
+    public let expiration: Expiration
     
-    init(originalPermission: BasePermission, expiration: PermissionExpiration) {
+    init(originalPermission: BasePermission, expiration: Expiration) {
         self.originalPermission = originalPermission
         self.expiration = expiration
     }

@@ -9,8 +9,8 @@ import Foundation
 import StoreKit
 
 public struct ProductInfo {
-    public let product: BaseProduct
     public let originalProduct: Product
+    public let product: BaseProduct
     public let type: Product.ProductType
     public let displayName: String
     public let description: String
@@ -19,8 +19,8 @@ public struct ProductInfo {
     public let subscriptionInfo: SubscriptionInfo?
     
     init(_ originalProduct: Product, product: BaseProduct, subscriptionInfo: SubscriptionInfo?) {
-        self.product = product
         self.originalProduct = originalProduct
+        self.product = product
         self.type = originalProduct.type
         self.displayName = originalProduct.displayName
         self.description = originalProduct.description
@@ -31,8 +31,8 @@ public struct ProductInfo {
 }
 
 extension Product {
-    func toProductInfo(product: BaseProduct, transactions: [Transaction]) -> ProductInfo {
-        let subscriptionInfo = self.subscription?.toSubscriptionInfo(transactions: transactions)
+    func toProductInfo(product: BaseProduct) -> ProductInfo {
+        let subscriptionInfo = self.subscription?.toSubscriptionInfo()
         return ProductInfo(self, product: product, subscriptionInfo: subscriptionInfo)
     }
 }
