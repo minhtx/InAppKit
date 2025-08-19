@@ -31,6 +31,7 @@ public final class InAppService: InAppServiceType {
     private let products: [BaseProduct]
     private let permissions: [BasePermission]
     private var expiryCheckTask: Task<Void, Never>?
+    private var isExpiryCheckRunning = false
     
     public init(products: [BaseProduct], permissions: [BasePermission]) {
         self.products = products
@@ -387,12 +388,17 @@ extension InAppService {
     }
     
     private func startExpiryCheckLoop() {
+        guard !isExpiryCheckRunning else {
+            return
+        }
+        isExpiryCheckRunning = true
         print("[InAppKit] Start expiry check loop!")
         self.expiryCheckTask?.cancel()
         self.expiryCheckTask = Task.detached(priority: .background) { [weak self] in
             let expiryCheckInterval = 30
+            try? await Task.sleep(nanoseconds: UInt64(expiryCheckInterval * Constant.nanoseconds))
+            
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(expiryCheckInterval * 1_000_000_000))
                 guard let self = self else {
                     return
                 }
@@ -412,6 +418,8 @@ extension InAppService {
                     print("[InAppKit] Permission expired!")
                     await self.updatePermissions()
                 }
+                
+                try? await Task.sleep(nanoseconds: UInt64(expiryCheckInterval * Constant.nanoseconds))
             }
         }
     }
@@ -420,5 +428,6 @@ extension InAppService {
         print("[InAppKit] Stop expiry check loop!")
         expiryCheckTask?.cancel()
         self.expiryCheckTask = nil
+        self.isExpiryCheckRunning = false
     }
 }
