@@ -30,6 +30,8 @@ public final class InAppService: InAppServiceType {
     
     private let products: [BaseProduct]
     private let permissions: [BasePermission]
+    private var cancellables = Set<AnyCancellable>()
+    private var requestPermissionsSubject = PassthroughSubject<Void, Never>()
     private var expiryCheckTask: Task<Void, Never>?
     private var isExpiryCheckRunning = false
     
@@ -37,10 +39,9 @@ public final class InAppService: InAppServiceType {
         self.products = products
         self.permissions = permissions
         
+        setupObserver()
         requestPermissions()
-        observeTransactions()
         startExpiryCheckLoop()
-        addObserver()
     }
     
     deinit {
@@ -231,7 +232,7 @@ extension InAppService {
 }
 
 extension InAppService {
-    private func addObserver() {
+    private func setupObserver() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appDidBecomeActive),
@@ -243,6 +244,17 @@ extension InAppService {
             selector: #selector(appWillResignActive),
             name: UIApplication.willResignActiveNotification,
             object: nil)
+        
+        observeTransactions()
+        
+        requestPermissionsSubject
+            .debounce(for: .seconds(0.5), scheduler: DispatchQueue.global())
+            .sink { [weak self] _ in
+                Task {
+                    await self?.updatePermissions()
+                }
+            }
+            .store(in: &cancellables)
     }
     
     @objc private func appDidBecomeActive() {
@@ -267,17 +279,8 @@ extension InAppService {
         return transactions
     }
     
-    private func requestPermissions() {
-        Task.detached(priority: .background) { [weak self] in
-            guard let self else {
-                return
-            }
-            await self.updatePermissions()
-        }
-    }
-    
     private func observeTransactions() {
-        Task.detached(priority: .background) { [weak self] in
+        Task { [weak self] in
             for await verification in Transaction.updates {
                 guard let self else {
                     return
@@ -285,10 +288,14 @@ extension InAppService {
                 guard case .verified(let transaction) = verification else {
                     continue
                 }
-                await self.updatePermissions()
                 await transaction.finish()
+                self.requestPermissions()
             }
         }
+    }
+    
+    private func requestPermissions() {
+        requestPermissionsSubject.send(())
     }
     
     private func updatePermissions() async {
@@ -391,10 +398,10 @@ extension InAppService {
         guard !isExpiryCheckRunning else {
             return
         }
-        isExpiryCheckRunning = true
+        self.isExpiryCheckRunning = true
         print("[InAppKit] Start expiry check loop!")
         self.expiryCheckTask?.cancel()
-        self.expiryCheckTask = Task.detached(priority: .background) { [weak self] in
+        self.expiryCheckTask = Task { [weak self] in
             let expiryCheckInterval = 30
             try? await Task.sleep(nanoseconds: UInt64(expiryCheckInterval * Constant.nanoseconds))
             
