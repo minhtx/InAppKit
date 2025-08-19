@@ -338,7 +338,7 @@ extension InAppService {
             guard let expirationDate = transaction.expirationDate, expirationDate >= Date() else {
                 return []
             }
-            expiration = .expires(on: expirationDate)
+            expiration = .validUntil(expirationDate)
         case .nonConsumable:
             expiration = .lifetime
         case .nonRenewable:
@@ -352,7 +352,7 @@ extension InAppService {
             guard expirationDate >= Date() else {
                 return []
             }
-            expiration = .expires(on: expirationDate)
+            expiration = .validUntil(expirationDate)
         default:
             return []
         }
@@ -402,7 +402,7 @@ extension InAppService {
                 let permissions = self.permissionsSubject.value
                 
                 for permission in permissions {
-                    if case .expires(let date) = permission.expiration, date < Date() {
+                    if case .validUntil(let date) = permission.expiration, date < Date() {
                         shouldUpdate = true
                         break
                     }

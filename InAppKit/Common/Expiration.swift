@@ -9,8 +9,8 @@ import Foundation
 
 public enum Expiration: Equatable {
     case lifetime
-    case expires(on: Date)
-    case unknown
+    case validUntil(Date)
+    case expired
 }
 
 extension Expiration {
@@ -18,14 +18,14 @@ extension Expiration {
         switch (a, b) {
         case (.lifetime, _), (_, .lifetime):
             return .lifetime
-        case let (.expires(dateA), .expires(dateB)):
+        case let (.validUntil(dateA), .validUntil(dateB)):
             return dateA > dateB ? a : b
-        case (.expires, .unknown):
+        case (.validUntil, .expired):
             return a
-        case (.unknown, .expires):
+        case (.expired, .validUntil):
             return b
-        case (.unknown, .unknown):
-            return .unknown
+        case (.expired, .expired):
+            return .expired
         }
     }
 }
